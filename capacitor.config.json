@@ -1,0 +1,17 @@
+{
+  "appId": "com.conway.life",
+  "appName": "生命游戏",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#dfece4"
+    }
+  }
+}

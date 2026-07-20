@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">生命游戏</string>
+    <string name="title_activity_main">生命游戏</string>
+    <string name="package_name">com.conway.life</string>
+    <string name="custom_url_scheme">com.conway.life</string>
+</resources>

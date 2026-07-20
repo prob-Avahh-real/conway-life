@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>生命游戏 · Conway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14241f;
+  --cell:#0b6b5a;
+  --cell-glow:#1a9b7e;
+  --grid:#c5d4cc;
+  --bg0:#dfece4;
+  --bg1:#b8cfc2;
+  --panel:#f3faf6;
+  --accent:#c45c26;
+  --accent-ink:#fff8f3;
+  --muted:#5a7268;
+  --cursor:#c45c26;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+  font-family:"DM Sans",system-ui,sans-serif;color:var(--ink);
+  background:radial-gradient(120% 80% at 20% 0%,#eef7f1 0%,var(--bg0) 45%,var(--bg1) 100%)}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.18;
+  background-image:radial-gradient(circle at 1px 1px,rgba(20,36,31,.35) 1px,transparent 0);
+  background-size:14px 14px}
+#app{position:relative;height:100%;display:flex;flex-direction:column;
+  padding:calc(8px + var(--safe-top)) 10px calc(8px + var(--safe-bottom))}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;z-index:2;margin-bottom:6px}
+.brand{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:clamp(18px,5.2vw,28px);letter-spacing:-.03em;line-height:1}
+.brand span{color:var(--accent)}
+.stats{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);text-align:right;line-height:1.35}
+#stage{position:relative;flex:1;min-height:0;border-radius:18px;overflow:hidden;
+  box-shadow:0 18px 40px rgba(20,36,31,.18),inset 0 0 0 1px rgba(20,36,31,.08);
+  background:linear-gradient(160deg,#f7fcf9,#e4f0e9)}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#cursor-dot{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border:2px solid var(--cursor);
+  border-radius:50%;pointer-events:none;opacity:0;transition:opacity .2s;z-index:3;
+  box-shadow:0 0 0 3px rgba(196,92,38,.2)}
+#cursor-dot.show{opacity:1}
+#toolbar{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px;z-index:2}
+button{appearance:none;border:none;border-radius:12px;padding:10px 6px;font:700 12px/1 "DM Sans",sans-serif;
+  color:var(--ink);background:var(--panel);box-shadow:inset 0 0 0 1px rgba(20,36,31,.1);
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:active{transform:scale(.96)}
+button.primary{background:var(--accent);color:var(--accent-ink);box-shadow:none}
+button.active{background:var(--cell);color:#eafff7}
+#presets{display:flex;gap:6px;overflow-x:auto;margin-top:6px;padding-bottom:2px;z-index:2;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+#presets::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;border:none;border-radius:999px;padding:7px 12px;font:700 11px/1 "JetBrains Mono",monospace;
+  color:var(--muted);background:rgba(243,250,246,.85);box-shadow:inset 0 0 0 1px rgba(20,36,31,.1);cursor:pointer}
+.chip:active,.chip.on{color:var(--accent-ink);background:var(--ink)}
+#hint{margin-top:6px;font-size:10px;color:var(--muted);text-align:center;z-index:2}
+#ring-status,#cane-status{position:fixed;right:10px;z-index:50;font:700 10px/1 "JetBrains Mono",monospace;
+  padding:5px 8px;border-radius:999px;display:none;background:rgba(243,250,246,.92);
+  color:var(--muted);box-shadow:inset 0 0 0 1px rgba(20,36,31,.12)}
+#ring-status{top:calc(10px + var(--safe-top))}
+#cane-status{top:calc(36px + var(--safe-top))}
+#ring-status.active,#cane-status.active{display:block;color:var(--cell)}
+#ring-status.pending,#cane-status.pending{display:block}
+
+/* watch */
+@media(max-width:280px),(max-height:300px){
+  #app{padding:4px}
+  header{margin-bottom:2px}
+  .brand{font-size:12px}
+  .stats{font-size:8px}
+  #toolbar{grid-template-columns:repeat(5,1fr);gap:3px;margin-top:4px}
+  button{padding:6px 2px;font-size:9px;border-radius:8px}
+  #presets{gap:3px;margin-top:3px}
+  .chip{padding:4px 7px;font-size:8px}
+  #hint{display:none}
+  #stage{border-radius:10px}
+  #ring-status,#cane-status{font-size:8px;padding:3px 5px;right:4px}
+  #ring-status{top:4px}#cane-status{top:22px}
+}
+/* glasses / compact */
+@media(max-width:420px) and (max-height:340px),(max-width:340px) and (max-height:420px){
+  .brand{font-size:14px}
+  .stats{font-size:9px}
+  button{padding:7px 3px;font-size:10px}
+  #hint{font-size:9px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">LIFE<span>·</span>GAME</div>
+    <div class="stats">
+      <div id="gen">GEN 0</div>
+      <div id="pop">POP 0</div>
+      <div id="spd">120ms</div>
+    </div>
+  </header>
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="cursor-dot"></div>
+  </div>
+  <div id="toolbar">
+    <button id="btn-play" class="primary" type="button">播放</button>
+    <button id="btn-step" type="button">单步</button>
+    <button id="btn-rand" type="button">随机</button>
+    <button id="btn-clear" type="button">清空</button>
+    <button id="btn-speed" type="button">加速</button>
+  </div>
+  <div id="presets"></div>
+  <div id="hint">触屏绘制 · 戒指倾斜移动光标/甩动切换 · 手杖轻点播放/挥动单步</div>
+</div>
+<div id="ring-status"></div>
+<div id="cane-status"></div>
+
+<script>
+(() => {
+  const COLS = 48;
+  const ROWS = 48;
+  const SPEEDS = [240, 120, 60, 30];
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const stage = document.getElementById('stage');
+  const cursorDot = document.getElementById('cursor-dot');
+  const genEl = document.getElementById('gen');
+  const popEl = document.getElementById('pop');
+  const spdEl = document.getElementById('spd');
+  const btnPlay = document.getElementById('btn-play');
+  const btnStep = document.getElementById('btn-step');
+  const btnRand = document.getElementById('btn-rand');
+  const btnClear = document.getElementById('btn-clear');
+  const btnSpeed = document.getElementById('btn-speed');
+  const presetsEl = document.getElementById('presets');
+
+  let grid = new Uint8Array(COLS * ROWS);
+  let next = new Uint8Array(COLS * ROWS);
+  let running = false;
+  let generation = 0;
+  let speedIdx = 1;
+  let cell = 1, originX = 0, originY = 0, dpr = 1;
+  let paintMode = 1;
+  let painting = false;
+  let cursor = { x: Math.floor(COLS / 2), y: Math.floor(ROWS / 2), visible: false };
+
+  const PATTERNS = {
+    '滑翔机': [[1,0],[2,1],[0,2],[1,2],[2,2]],
+    '轻型飞船': [[1,0],[4,0],[0,1],[0,2],[4,2],[0,3],[1,3],[2,3],[3,3]],
+    '蜂巢': [[1,0],[2,0],[0,1],[3,1],[1,2],[2,2]],
+    '脉冲星': [
+      [2,0],[3,0],[4,0],[2,5],[3,5],[4,5],[0,2],[0,3],[0,4],[5,2],[5,3],[5,4],
+      [8,2],[8,3],[8,4],[13,2],[13,3],[13,4],[9,0],[10,0],[11,0],[9,5],[10,5],[11,5],
+      [2,8],[3,8],[4,8],[2,13],[3,13],[4,13],[0,9],[0,10],[0,11],[5,9],[5,10],[5,11],
+      [8,9],[8,10],[8,11],[13,9],[13,10],[13,11],[9,8],[10,8],[11,8],[9,13],[10,13],[11,13]
+    ],
+    '蟾蜍': [[1,0],[2,0],[3,0],[0,1],[1,1],[2,1]],
+    '信标': [[0,0],[1,0],[0,1],[1,1],[2,2],[3,2],[2,3],[3,3]],
+    '高斯枪': [
+      [24,0],[22,1],[24,1],[12,2],[13,2],[20,2],[21,2],[34,2],[35,2],
+      [11,3],[15,3],[20,3],[21,3],[34,3],[35,3],
+      [0,4],[1,4],[10,4],[16,4],[20,4],[21,4],
+      [0,5],[1,5],[10,5],[14,5],[16,5],[17,5],[22,5],[24,5],
+      [10,6],[16,6],[24,6],
+      [11,7],[15,7],
+      [12,8],[13,8]
+    ],
+  };
+
+  function idx(x, y) { return y * COLS + x; }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = stage.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(r.width * dpr));
+    canvas.height = Math.max(1, Math.floor(r.height * dpr));
+    cell = Math.floor(Math.min(canvas.width / COLS, canvas.height / ROWS));
+    originX = Math.floor((canvas.width - cell * COLS) / 2);
+    originY = Math.floor((canvas.height - cell * ROWS) / 2);
+    draw();
+    syncCursorDot();
+  }
+
+  function countNeighbors(x, y) {
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const xx = (x + dx + COLS) % COLS;
+        const yy = (y + dy + ROWS) % ROWS;
+        n += grid[idx(xx, yy)];
+      }
+    }
+    return n;
+  }
+
+  function step() {
+    let pop = 0;
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const i = idx(x, y);
+        const alive = grid[i];
+        const n = countNeighbors(x, y);
+        const v = alive ? (n === 2 || n === 3 ? 1 : 0) : (n === 3 ? 1 : 0);
+        next[i] = v;
+        pop += v;
+      }
+    }
+    const tmp = grid; grid = next; next = tmp;
+    generation++;
+    updateHud(pop);
+    draw();
+  }
+
+  function population() {
+    let p = 0;
+    for (let i = 0; i < grid.length; i++) p += grid[i];
+    return p;
+  }
+
+  function updateHud(pop = population()) {
+    genEl.textContent = `GEN ${generation}`;
+    popEl.textContent = `POP ${pop}`;
+    spdEl.textContent = `${SPEEDS[speedIdx]}ms`;
+  }
+
+  function draw() {
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#dfe8e3';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#eef6f1';
+    ctx.fillRect(originX, originY, cell * COLS, cell * ROWS);
+
+    ctx.strokeStyle = 'rgba(20,36,31,.08)';
+    ctx.lineWidth = Math.max(1, dpr * 0.5);
+    ctx.beginPath();
+    for (let x = 0; x <= COLS; x++) {
+      const px = originX + Math.round(x * cell) + 0.5;
+      ctx.moveTo(px, originY); ctx.lineTo(px, originY + cell * ROWS);
+    }
+    for (let y = 0; y <= ROWS; y++) {
+      const py = originY + Math.round(y * cell) + 0.5;
+      ctx.moveTo(originX, py); ctx.lineTo(originX + cell * COLS, py);
+    }
+    ctx.stroke();
+
+    const pad = cell * 0.12;
+    const rad = Math.min(4 * dpr, cell * 0.2);
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (!grid[idx(x, y)]) continue;
+        const px = originX + x * cell;
+        const py = originY + y * cell;
+        const g = ctx.createLinearGradient(px, py, px + cell, py + cell);
+        g.addColorStop(0, '#1a9b7e');
+        g.addColorStop(1, '#0b6b5a');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        roundRect(ctx, px + pad, py + pad, cell - pad * 2, cell - pad * 2, rad);
+        ctx.fill();
+      }
+    }
+
+    if (cursor.visible) {
+      ctx.strokeStyle = 'rgba(196,92,38,.9)';
+      ctx.lineWidth = Math.max(1.5, dpr);
+      ctx.strokeRect(originX + cursor.x * cell + 1, originY + cursor.y * cell + 1, cell - 2, cell - 2);
+    }
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    c.moveTo(x + rr, y);
+    c.arcTo(x + w, y, x + w, y + h, rr);
+    c.arcTo(x + w, y + h, x, y + h, rr);
+    c.arcTo(x, y + h, x, y, rr);
+    c.arcTo(x, y, x + w, y, rr);
+    c.closePath();
+  }
+
+  function setCell(x, y, v) {
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    grid[idx(x, y)] = v ? 1 : 0;
+  }
+
+  function toggleCell(x, y) {
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    const i = idx(x, y);
+    grid[i] = grid[i] ? 0 : 1;
+  }
+
+  function clearGrid() {
+    grid.fill(0);
+    generation = 0;
+    updateHud(0);
+    draw();
+  }
+
+  function randomize(density = 0.28) {
+    for (let i = 0; i < grid.length; i++) grid[i] = Math.random() < density ? 1 : 0;
+    generation = 0;
+    updateHud();
+    draw();
+  }
+
+  function stamp(name, cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2)) {
+    const cells = PATTERNS[name];
+    if (!cells) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of cells) {
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    const ox = cx - Math.floor((maxX - minX) / 2) - minX;
+    const oy = cy - Math.floor((maxY - minY) / 2) - minY;
+    for (const [x, y] of cells) {
+      setCell((ox + x + COLS) % COLS, (oy + y + ROWS) % ROWS, 1);
+    }
+    generation = 0;
+    updateHud();
+    draw();
+  }
+
+  function cellFromEvent(e) {
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    const sx = ((t.clientX - r.left) / r.width) * canvas.width;
+    const sy = ((t.clientY - r.top) / r.height) * canvas.height;
+    const x = Math.floor((sx - originX) / cell);
+    const y = Math.floor((sy - originY) / cell);
+    return { x: Math.max(0, Math.min(COLS - 1, x)), y: Math.max(0, Math.min(ROWS - 1, y)) };
+  }
+
+  function setRunning(v) {
+    running = v;
+    btnPlay.textContent = running ? '暂停' : '播放';
+    btnPlay.classList.toggle('primary', !running);
+    btnPlay.classList.toggle('active', running);
+  }
+
+  function syncCursorDot() {
+    if (!cursor.visible) {
+      cursorDot.classList.remove('show');
+      return;
+    }
+    const r = canvas.getBoundingClientRect();
+    const sr = stage.getBoundingClientRect();
+    const x = ((originX + (cursor.x + 0.5) * cell) / canvas.width) * r.width + (r.left - sr.left);
+    const y = ((originY + (cursor.y + 0.5) * cell) / canvas.height) * r.height + (r.top - sr.top);
+    cursorDot.style.left = `${x}px`;
+    cursorDot.style.top = `${y}px`;
+    cursorDot.classList.add('show');
+  }
+
+  function showCursor(x, y) {
+    cursor.x = Math.max(0, Math.min(COLS - 1, x));
+    cursor.y = Math.max(0, Math.min(ROWS - 1, y));
+    cursor.visible = true;
+    syncCursorDot();
+    draw();
+  }
+
+  // pointer paint
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    const { x, y } = cellFromEvent(e);
+    paintMode = grid[idx(x, y)] ? 0 : 1;
+    painting = true;
+    setCell(x, y, paintMode);
+    showCursor(x, y);
+    updateHud();
+    draw();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!painting) return;
+    const { x, y } = cellFromEvent(e);
+    setCell(x, y, paintMode);
+    showCursor(x, y);
+    updateHud();
+    draw();
+  });
+  canvas.addEventListener('pointerup', () => { painting = false; });
+  canvas.addEventListener('pointercancel', () => { painting = false; });
+
+  btnPlay.addEventListener('click', () => setRunning(!running));
+  btnStep.addEventListener('click', () => { setRunning(false); step(); });
+  btnRand.addEventListener('click', () => { setRunning(false); randomize(); });
+  btnClear.addEventListener('click', () => { setRunning(false); clearGrid(); });
+  btnSpeed.addEventListener('click', () => {
+    speedIdx = (speedIdx + 1) % SPEEDS.length;
+    updateHud();
+  });
+
+  for (const name of Object.keys(PATTERNS)) {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.type = 'button';
+    b.textContent = name;
+    b.addEventListener('click', () => {
+      setRunning(false);
+      clearGrid();
+      stamp(name);
+      [...presetsEl.children].forEach((c) => c.classList.toggle('on', c === b));
+    });
+    presetsEl.appendChild(b);
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { e.preventDefault(); setRunning(!running); }
+    else if (e.key === 'n' || e.key === 'N') { setRunning(false); step(); }
+    else if (e.key === 'c' || e.key === 'C') { setRunning(false); clearGrid(); }
+    else if (e.key === 'r' || e.key === 'R') { setRunning(false); randomize(); }
+    else if (e.key === '+' || e.key === '=') { speedIdx = Math.min(SPEEDS.length - 1, speedIdx + 1); updateHud(); }
+    else if (e.key === '-' || e.key === '_') { speedIdx = Math.max(0, speedIdx - 1); updateHud(); }
+    else if (e.key === 'ArrowLeft') showCursor(cursor.x - 1, cursor.y);
+    else if (e.key === 'ArrowRight') showCursor(cursor.x + 1, cursor.y);
+    else if (e.key === 'ArrowUp') showCursor(cursor.x, cursor.y - 1);
+    else if (e.key === 'ArrowDown') showCursor(cursor.x, cursor.y + 1);
+    else if (e.key === 'Enter') { toggleCell(cursor.x, cursor.y); updateHud(); draw(); }
+  });
+
+  // ===== Wearable: ring + cane =====
+  let ringActive = false, ringFrame = 0, ringPrevBeta = null, ringPrevGamma = null;
+  let caneActive = false, caneFrame = 0, caneLastAccel = { x: 0, y: 0, z: 0 }, canePrevGamma = null, lastHitAt = 0;
+
+  function setupRing() {
+    if (typeof DeviceOrientationEvent === 'undefined') return;
+    const b = document.getElementById('ring-status');
+    b.className = 'pending';
+    b.textContent = '戒指 · 点此启用';
+    b.style.cursor = 'pointer';
+    const enable = async () => {
+      try {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          const p = await DeviceOrientationEvent.requestPermission();
+          if (p !== 'granted') return;
+        }
+        ringActive = true;
+        b.className = 'active';
+        b.textContent = '戒指 · 已连接';
+        b.style.cursor = 'default';
+        b.onclick = null;
+        window.addEventListener('deviceorientation', handleRing);
+        showCursor(cursor.x, cursor.y);
+      } catch {
+        b.textContent = '戒指 · 不支持';
+      }
+    };
+    b.onclick = enable;
+    if (typeof DeviceOrientationEvent.requestPermission !== 'function') enable();
+  }
+
+  function setupCane() {
+    if (typeof DeviceMotionEvent === 'undefined') return;
+    const b = document.getElementById('cane-status');
+    b.className = 'pending';
+    b.textContent = '手杖 · 点此启用';
+    b.style.cursor = 'pointer';
+    const enable = async () => {
+      try {
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+          const p = await DeviceMotionEvent.requestPermission();
+          if (p !== 'granted') return;
+        }
+        caneActive = true;
+        b.className = 'active';
+        b.textContent = '手杖 · 已连接';
+        b.style.cursor = 'default';
+        b.onclick = null;
+        window.addEventListener('devicemotion', handleCane);
+      } catch {
+        b.textContent = '手杖 · 不支持';
+      }
+    };
+    b.onclick = enable;
+    if (typeof DeviceMotionEvent.requestPermission !== 'function') enable();
+  }
+
+  function handleRing(e) {
+    if (!ringActive) return;
+    ringFrame++;
+    const beta = e.beta || 0;
+    const gamma = e.gamma || 0;
+
+    // map tilt to cursor every other frame
+    if (ringFrame % 2 === 0) {
+      const nx = Math.floor(((gamma / 45) + 1) * 0.5 * (COLS - 1));
+      const ny = Math.floor(((beta / 45) + 1) * 0.5 * (ROWS - 1));
+      showCursor(nx, ny);
+    }
+
+    if (ringFrame % 8 !== 0) return;
+    if (ringPrevBeta === null) {
+      ringPrevBeta = beta;
+      ringPrevGamma = gamma;
+      return;
+    }
+    const dBeta = Math.abs(beta - ringPrevBeta);
+    const dGamma = Math.abs(gamma - ringPrevGamma);
+    ringPrevBeta = beta;
+    ringPrevGamma = gamma;
+    if (dBeta > 20 || dGamma > 20) {
+      toggleCell(cursor.x, cursor.y);
+      updateHud();
+      draw();
+    }
+  }
+
+  function handleCane(e) {
+    if (!caneActive) return;
+    caneFrame++;
+    if (caneFrame % 6 !== 0) return;
+    const a = e.accelerationIncludingGravity || e.acceleration || { x: 0, y: 0, z: 0 };
+    const ax = a.x || 0, ay = a.y || 0, az = a.z || 0;
+    const dax = Math.abs(ax - caneLastAccel.x);
+    const day = Math.abs(ay - caneLastAccel.y);
+    const daz = Math.abs(az - caneLastAccel.z);
+    caneLastAccel = { x: ax, y: ay, z: az };
+
+    if (dax > 8 || day > 8 || daz > 8) {
+      const now = Date.now();
+      if (now - lastHitAt < 220) return;
+      lastHitAt = now;
+      setRunning(!running);
+      return;
+    }
+
+    const rot = e.rotationRate || { gamma: 0 };
+    const g = rot.gamma || 0;
+    if (canePrevGamma !== null && Math.abs(g - canePrevGamma) > 3) {
+      const now = Date.now();
+      if (now - lastHitAt < 160) {
+        canePrevGamma = g;
+        return;
+      }
+      lastHitAt = now;
+      setRunning(false);
+      step();
+    }
+    canePrevGamma = g;
+  }
+
+  let lastTick = 0;
+  function loop(ts) {
+    if (running && ts - lastTick >= SPEEDS[speedIdx]) {
+      lastTick = ts;
+      step();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+
+  // seed a glider + random dust
+  clearGrid();
+  stamp('滑翔机', 10, 10);
+  stamp('轻型飞船', 30, 40);
+  for (let i = 0; i < 40; i++) {
+    setCell((Math.random() * COLS) | 0, (Math.random() * ROWS) | 0, 1);
+  }
+  updateHud();
+  resize();
+  setupRing();
+  setupCane();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
