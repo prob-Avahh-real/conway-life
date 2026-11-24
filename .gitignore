@@ -10,3 +10,15 @@ android/app/build/
 android/build/
 ios/App/Pods/
 ios/App/build/
+
+# Build, cache & secret exclusions
+.env
+.env.*
+!.env.example
+.npm-cache/
+.build/
+DerivedData/
+.gradle/
+__pycache__/
+.venv/
+*.aab
